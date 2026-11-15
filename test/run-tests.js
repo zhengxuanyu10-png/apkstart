@@ -128,7 +128,57 @@ if (fixture) {
     }
   });
 } else {
-  console.log('  （跳过：未找到 APK 夹具，可设置 APKSTART_TEST_APK）');
+  console.log('  （跳过：未找到真实 APK，改用自建夹具）');
+}
+
+// ---------------------------------------------------------------------------
+// 自建夹具：现场生成一个最小 APK（零依赖），让 axml / arsc / apk 全链路
+// 在没有外部样本时也能跑起来。覆盖 label 走 arsc 引用、icon 走 file 引用、
+// 整数属性带 rawValue、anydpi 图标变体这几种真实 APK 里常见的情况。
+// ---------------------------------------------------------------------------
+if (!process.env.APKSTART_TEST_APK) {
+  console.log('\n[make-apk.js 自建夹具]');
+  const { buildSampleApk, buildArsc, LABEL, ICON_FILE } = require('./make-apk');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'apkstart-fixture-'));
+
+  const plain = buildSampleApk(tmp);
+  const m1 = parseApk(plain);
+
+  test('自建 APK：包名 / 版本名 / 版本号正确', () => {
+    assert(m1.package === 'com.example.demo', `包名: ${m1.package}`);
+    assert(m1.versionName === '1.4.2', `版本名: ${m1.versionName}`);
+    assert(m1.versionCode === 42, `版本号: ${m1.versionCode}`);
+  });
+  test('自建 APK：label 走 resources.arsc 引用', () => {
+    assert(m1.label === LABEL, `期望 ${LABEL}，实际 ${m1.label}`);
+  });
+  test('自建 APK：icon 走 arsc 文件引用并取到 PNG', () => {
+    assert(m1.iconFile === ICON_FILE, `期望 ${ICON_FILE}，实际 ${m1.iconFile}`);
+    assert(m1.iconPng && m1.iconPng.length > 100, '图标为空或过小');
+  });
+  test('自建 APK：minSdk / targetSdk / launchActivity / abis', () => {
+    assert(m1.minSdk === 24, `minSdk: ${m1.minSdk}`);
+    assert(m1.targetSdk === 34, `targetSdk: ${m1.targetSdk}`);
+    assert(m1.launchActivity === 'com.example.demo.MainActivity', `启动页: ${m1.launchActivity}`);
+    assert(m1.abis.includes('arm64-v8a'), `abis: ${JSON.stringify(m1.abis)}`);
+  });
+
+  // 回归：整型属性同时带 rawValue 时，不应被降级成字符串（否则 versionCode 丢成 0）
+  const withRaw = buildSampleApk(tmp, 'sample-raw.apk', { rawVersionCode: true });
+  const m2 = parseApk(withRaw);
+  test('回归：versionCode 带 rawValue 时仍解析为数字', () => {
+    assert(m2.versionCode === 42, `期望 42，实际 ${JSON.stringify(m2.versionCode)}`);
+  });
+
+  // 回归：同一资源在 anydpi 下是 xml 时，'file' 偏好必须仍然选到位图
+  test('回归：icon 有 anydpi xml 变体时仍选 png', () => {
+    const xml = 'res/mipmap-anydpi-v26/ic_launcher.xml';
+    const t = new ResTable(buildArsc({ appName: LABEL, iconPath: ICON_FILE, anydpiXml: xml }));
+    const picked = t.resolve(0x7f020000, 'file');
+    assert(picked === ICON_FILE, `期望 ${ICON_FILE}，实际 ${picked}`);
+  });
+
+  fs.rmSync(tmp, { recursive: true, force: true });
 }
 
 // 合成 APK 的构造器放在 test/lib/make-apk.js：真实夹具缺失时也能覆盖解析栈，

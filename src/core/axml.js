@@ -117,10 +117,12 @@ function parseAxml(buffer) {
         let value = null;
         let refId = null;
 
-        if (rawIdx !== 0xffffffff) {
-          value = pool[rawIdx];
-        } else if (dataType === TYPE_STRING) {
-          value = pool[data];
+        // 注意：aapt 会给整型/布尔属性也写 rawValue（如 versionCode="42"），
+        // 所以只在字符串类型上用 raw 兜底，其余以 typed value 为准，
+        // 否则 versionCode 会被解析成字符串，后续 typeof === 'number' 判断全部失效。
+        if (dataType === TYPE_STRING) {
+          const sIdx = rawIdx !== 0xffffffff ? rawIdx : data;
+          value = pool[sIdx] === undefined ? null : pool[sIdx];
         } else if (dataType === TYPE_REFERENCE) {
           refId = data >>> 0;
           value = null;
@@ -128,6 +130,8 @@ function parseAxml(buffer) {
           value = data !== 0;
         } else if (dataType === TYPE_INT_DEC || dataType === TYPE_INT_HEX) {
           value = data | 0;
+        } else if (rawIdx !== 0xffffffff) {
+          value = pool[rawIdx];
         }
 
         node.attrs.push({

@@ -184,7 +184,7 @@ apkstart/
 │     └─ store.js          应用清单与设置持久化
 ├─ engine/                 运行时组件下载缓存（emulator / system-images / platform-tools）
 ├─ tools/platform-tools/   便携 adb 放置处
-├─ test/                   单元测试 + Electron 集成测试 + 冒烟截图
+├─ test/                   单元测试 + Electron 集成测试 + 冒烟截图（make-apk.js 自建 APK 夹具）
 ├─ build/pack.js           便携版打包
 └─ scripts/assoc.js        .apk 关联命令行开关
 ```
@@ -205,6 +205,14 @@ npm run test:boot                          # 真实引导测试：用 61MB Alpin
 npm run selftest                           # 运行时自检：装好 Android 后一键验证 安装→启动→截图→共享目录
 electron test/electron-integration.js      # ICO / 快捷方式集成测试
 electron . --smoke test\shot.png           # 启动应用并截图（界面冒烟）
+```
+
+`test/run-tests.js` 里的 APK 解析链路默认自带夹具：`test/make-apk.js` 会现场生成一个最小 APK
+（AndroidManifest.xml + resources.arsc + 图标 PNG，零依赖），没有真实样本时也照常覆盖
+zip → axml → arsc → apk 全链路。要拿真实 APK 验证，设置环境变量即可：
+
+```powershell
+$env:APKSTART_TEST_APK = "D:\samples\demo.apk"; npm test
 ```
 
 `npm run selftest` 是装好系统后的「验收命令」——它会对当前设备依次检查 adb 连接、

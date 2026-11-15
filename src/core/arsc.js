@@ -65,8 +65,10 @@ function parseConfig(buf, off) {
 function score(cfg, prefer) {
   let s = 0;
   if (prefer === 'file') {
-    s += cfg.density === 0 ? 0 : cfg.density;          // 高密度优先
-    if (cfg.density === 0xfffe) s -= 500;               // anydpi 可能是 xml，扣分
+    // anydpi(0xfffe)/nodpi(0xffff) 在图标场景里几乎只可能是 adaptive-icon 的 xml，
+    // 不能当成位图用，必须压到最低分（原来只减 500，65534-500 依旧最高分，等于没扣）
+    if (cfg.density === 0xfffe || cfg.density === 0xffff) s -= 1e6;
+    else s += cfg.density === 0 ? 0 : cfg.density;      // 高密度优先
   } else {
     s -= cfg.density === 0 ? 0 : 10;                    // 字符串：无密度优先
     if (cfg.language) s -= 40;
